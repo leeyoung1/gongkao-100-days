@@ -1,0 +1,400 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>西部计划志愿者 100 天国考/省考高效上岸打卡系统</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- 预加载图标与字体 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+</head>
+<body>
+
+  <!-- 顶部导航栏 -->
+  <nav class="navbar">
+    <div class="nav-container">
+      <div class="brand">
+        <div class="brand-icon">
+          <span>🎯</span>
+        </div>
+        <div class="brand-title">
+          100天公考上岸计划
+          <span class="badge-tag">西部计划定向专版</span>
+        </div>
+      </div>
+      
+      <div class="nav-actions">
+        <button class="btn" id="btn-open-policy" title="西部计划报考政策与加分指南">
+          <span>📜</span>
+          <span>西部计划政策</span>
+        </button>
+        <button class="btn" id="btn-open-cheatsheet" title="行测与申论核心速查公式宝典">
+          <span>📖</span>
+          <span>高分速查宝典</span>
+        </button>
+        <button class="btn btn-icon" id="btn-theme-toggle" title="切换明暗主题">
+          <span id="theme-icon">🌙</span>
+        </button>
+        <button class="btn btn-icon" id="btn-export-data" title="导出打卡数据">
+          <span>💾</span>
+        </button>
+        <button class="btn btn-icon" id="btn-import-data" title="导入打卡数据">
+          <span>📂</span>
+        </button>
+        <input type="file" id="file-import-input" accept=".json" style="display: none;">
+      </div>
+    </div>
+  </nav>
+
+  <!-- 页面主体容器 -->
+  <main class="app-container">
+    
+    <!-- 顶部数据概览仪表盘 -->
+    <header class="stats-banner">
+      <!-- 进度环形图 -->
+      <div class="progress-ring-box">
+        <svg viewBox="0 0 100 100">
+          <circle class="progress-ring-bg" cx="50" cy="50" r="45" stroke-width="8" fill="transparent"></circle>
+          <circle class="progress-ring-fill" id="progress-circle" cx="50" cy="50" r="45" stroke-width="8" fill="transparent"></circle>
+        </svg>
+        <div class="progress-text">
+          <div class="val" id="stat-progress-pct">0%</div>
+          <div class="lbl">已完成进度</div>
+        </div>
+      </div>
+
+      <!-- 核心指标卡片 -->
+      <div class="stats-grid">
+        <div class="stat-item highlight">
+          <div class="stat-label">已打卡完成天数</div>
+          <div class="stat-val">
+            <span id="stat-completed-days">0</span>
+            <span class="unit">/ 100 天</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">累计有效学习估算</div>
+          <div class="stat-val">
+            <span id="stat-total-hours">0</span>
+            <span class="unit">小时</span>
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">当前备考阶段</div>
+          <div class="stat-val" style="font-size: 1.05rem;" id="stat-current-phase">
+            一阶段·基础筑基
+          </div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-label">距离百日目标倒计时</div>
+          <div class="stat-val">
+            <span id="stat-remaining-days">100</span>
+            <span class="unit">天</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- 番茄专注计时器 -->
+      <div class="banner-timer-widget">
+        <div class="timer-tag" id="timer-status-text">专注时钟 (每日2-3h)</div>
+        <div class="timer-display" id="timer-display">45:00</div>
+        <div class="timer-controls">
+          <button class="btn btn-primary" id="timer-toggle-btn" style="padding: 0.35rem 0.75rem; font-size: 0.8rem;">
+            <span>▶ 开始专注</span>
+          </button>
+          <button class="btn" id="timer-reset-btn" style="padding: 0.35rem 0.6rem; font-size: 0.8rem;" title="重置">
+            <span>↺</span>
+          </button>
+          <button class="btn" id="timer-mode-btn" style="padding: 0.35rem 0.6rem; font-size: 0.8rem;" title="切换模式 (25m/45m/60m)">
+            <span>⏱️</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <!-- 核心两列布局：左侧今日任务聚焦 / 右侧日历总览 -->
+    <section class="main-content-layout">
+
+      <!-- 左侧：今日核心聚焦卡 (Today Focus Card) -->
+      <article class="today-focus-card" id="today-focus-panel">
+        <div class="today-header">
+          <div>
+            <div class="day-badge-wrap">
+              <span class="day-pill" id="detail-day-pill">Day 01</span>
+              <span class="module-pill" id="detail-module-pill">资料分析</span>
+            </div>
+            <div class="phase-crumb" id="detail-phase-crumb" style="margin-top: 0.4rem;">
+              阶段一：模块基础筑基 (第 1/40 天)
+            </div>
+          </div>
+          <button class="btn" id="btn-jump-today" style="font-size: 0.75rem; padding: 0.25rem 0.6rem;">
+            定位至今日
+          </button>
+        </div>
+
+        <h2 class="today-title" id="detail-title">统计术语筑基与加减速算截位法</h2>
+
+        <!-- 每日 2-3 小时的时间拆解分配 -->
+        <div class="time-allocation-bar">
+          <div class="time-item">
+            <span class="t-lbl">网课精讲 (1.25x)</span>
+            <span class="t-val" id="detail-time-watch">50 分钟</span>
+          </div>
+          <div class="time-divider"></div>
+          <div class="time-item">
+            <span class="t-lbl">限时刷题精练</span>
+            <span class="t-val" id="detail-time-practice">60 分钟</span>
+          </div>
+          <div class="time-divider"></div>
+          <div class="time-item">
+            <span class="t-lbl">错题复盘与整理</span>
+            <span class="t-val" id="detail-time-review">30 分钟</span>
+          </div>
+          <div class="time-divider"></div>
+          <div class="time-item">
+            <span class="t-lbl">总计耗时</span>
+            <span class="t-val" style="color: var(--accent-primary);" id="detail-time-total">2.3 小时</span>
+          </div>
+        </div>
+
+        <!-- 核心考点与原理 -->
+        <div class="section-block">
+          <div class="section-title">
+            <span>📌</span>
+            <span>今日核心高频考点精要</span>
+          </div>
+          <div class="core-knowledge-box" id="detail-knowledge">
+            <!-- 动态注入知识点 -->
+          </div>
+        </div>
+
+        <!-- 推荐权威名师与教材 -->
+        <div class="section-block">
+          <div class="section-title">
+            <span>📚</span>
+            <span>权威名师网课与配套刷题书目</span>
+          </div>
+          <div class="resource-box">
+            <div class="resource-card">
+              <div class="resource-icon">🎬</div>
+              <div class="resource-info">
+                <div class="r-type">权威网课精讲</div>
+                <div class="r-name" id="detail-course-name">齐麟·资料分析系统课</div>
+                <div class="r-detail" id="detail-course-detail">第01讲：统计概念与读数技巧、高频坑点总结</div>
+              </div>
+            </div>
+            <div class="resource-card">
+              <div class="resource-icon">📖</div>
+              <div class="resource-info">
+                <div class="r-type">配套刷题与教材</div>
+                <div class="r-name" id="detail-book-name">《粉笔决战行测5000题·资料分析》</div>
+                <div class="r-detail" id="detail-book-detail">第一章速算技巧篇 第1-30题（限时25分钟）</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 任务清单 Checklist -->
+        <div class="section-block">
+          <div class="section-title">
+            <span>✅</span>
+            <span>今日行动清单 (Checklist)</span>
+          </div>
+          <div class="checklist-wrap" id="detail-checklist">
+            <!-- 动态注入任务 -->
+          </div>
+        </div>
+
+        <!-- 每日思考与小自测 -->
+        <div class="section-block">
+          <div class="quiz-box">
+            <div class="quiz-header">
+              <span>💡</span>
+              <span id="detail-quiz-title">今日考点即问即答</span>
+            </div>
+            <div id="detail-quiz-question" style="font-weight: 500; margin-bottom: 0.4rem;">
+              如何迅速判断两期比重是上升还是下降？
+            </div>
+            <details style="cursor: pointer; color: var(--text-muted); font-size: 0.8rem;">
+              <summary style="outline: none; color: var(--accent-primary); font-weight: 600;">点击查看标准推导口诀</summary>
+              <div id="detail-quiz-answer" style="margin-top: 0.4rem; padding-top: 0.4rem; border-top: 1px dashed var(--border-color);">
+                只要比较“部分增长率 a”与“总体增长率 b”的大小：若 a > b，则现期比重上升；若 a < b，则现期比重下降；若 a = b，则比重保持不变。
+              </div>
+            </details>
+          </div>
+        </div>
+
+        <!-- 西部计划志愿者专属实战提点 -->
+        <div class="section-block">
+          <div class="volunteer-tip" id="detail-volunteer-tip">
+            <strong>🌟 西部计划备考贴士</strong>：白天服务单位若有数据报表或政府公文，可留心观察“同比、环比、百分点”在政府工作报告中的实际用法，直接把基层实践转化为行测与申论语感！
+          </div>
+        </div>
+
+        <!-- 每日错题反思与随笔记事 -->
+        <div class="section-block">
+          <div class="section-title">
+            <span>📝</span>
+            <span>错题归因与备考随笔（自动本地保存）</span>
+          </div>
+          <textarea class="note-textarea" id="detail-notes-input" placeholder="记录今天刷题掉进的陷阱、难记的公式、生疏的成语或重要心得..."></textarea>
+        </div>
+
+        <!-- 打卡大按钮 -->
+        <div class="complete-action-box">
+          <button class="btn btn-primary btn-complete-day" id="btn-toggle-complete">
+            <span id="complete-icon">✓</span>
+            <span id="complete-btn-text">完成今日学习并打卡</span>
+          </button>
+        </div>
+      </article>
+
+      <!-- 右侧：100天全局日历矩阵与流水列表 -->
+      <section class="overview-panel">
+        
+        <!-- 控制栏：阶段筛选、科目筛选、视图切换 -->
+        <div class="controls-bar">
+          <!-- 阶段筛选 Tab -->
+          <div class="phase-tabs" id="phase-tabs-container">
+            <button class="tab-btn active" data-phase="all">全部 (100天)</button>
+            <button class="tab-btn" data-phase="1">一阶段·筑基 (1-40)</button>
+            <button class="tab-btn" data-phase="2">二阶段·提速 (41-65)</button>
+            <button class="tab-btn" data-phase="3">三阶段·真题 (66-90)</button>
+            <button class="tab-btn" data-phase="4">四阶段·冲刺 (91-100)</button>
+          </div>
+
+          <!-- 视图切换 (网格 vs 列表) -->
+          <div class="view-mode-toggle">
+            <button class="view-btn active" id="view-grid-btn" title="网格矩阵日历视图">🔲 日历矩阵</button>
+            <button class="view-btn" id="view-list-btn" title="流水列表视图">📑 详细列表</button>
+          </div>
+        </div>
+
+        <!-- 模块筛选标签 Tag -->
+        <div style="margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap;">
+          <span style="font-size: 0.76rem; color: var(--text-muted); font-weight: 600;">科目过滤：</span>
+          <div class="filter-tags" id="module-filters-container">
+            <span class="filter-tag active" data-module="all">全部科目</span>
+            <span class="filter-tag" data-module="资料分析">资料分析</span>
+            <span class="filter-tag" data-module="判断推理">判断推理</span>
+            <span class="filter-tag" data-module="言语理解">言语理解</span>
+            <span class="filter-tag" data-module="申论">申论</span>
+            <span class="filter-tag" data-module="数量关系">数量关系</span>
+            <span class="filter-tag" data-module="常识时政">常识时政</span>
+            <span class="filter-tag" data-module="综合模考">全真模考</span>
+          </div>
+        </div>
+
+        <!-- 日历矩阵展示区 (100 Days Grid) -->
+        <div class="days-grid" id="days-grid-container">
+          <!-- 100个格子由 app.js 动态渲染 -->
+        </div>
+
+        <!-- 列表视图展示区 (List View) -->
+        <div class="days-list" id="days-list-container">
+          <!-- 列表项由 app.js 动态渲染 -->
+        </div>
+
+      </section>
+
+    </section>
+  </main>
+
+  <!-- 弹窗一：高分速查宝典 Modal -->
+  <div class="modal-overlay" id="modal-cheatsheet">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">📖 行测与申论核心速查公式与思维框架</h3>
+        <button class="modal-close-btn" id="modal-close-cheatsheet">✕</button>
+      </div>
+      <div class="cheat-sheet-grid">
+        <div class="cheat-card">
+          <h4>1. 资料分析·终极秒杀公式库</h4>
+          <ul>
+            <li><strong>基期量计算</strong>：基期 = 现期 / (1 + r) ≈ 现期 - 现期 × r（当 |r| ≤ 5% 时使用化除为乘）。</li>
+            <li><strong>增长量计算（百化分/n+1法则）</strong>：若增长率 r ≈ 1/n，则增长量 ≈ 现期/(n+1)；若负增长 r ≈ -1/n，减少量 ≈ 现期/(n-1)。</li>
+            <li><strong>两期比重升降口诀</strong>：部分增长率 a &gt; 总体增长率 b，比重上升；a &lt; b 则下降。两期比重差值一定小于 |a-b|。</li>
+            <li><strong>混合增长率（十字交叉/线段法）</strong>：混合增长率介于两部分之间，偏向基期体量（现期近似）较大的一侧。口诀：“居中偏大”。</li>
+            <li><strong>平均数增长率</strong>：r = (a - b)/(1 + b)，其中 a 为分子增长率，b 为分母增长率。</li>
+          </ul>
+        </div>
+        <div class="cheat-card">
+          <h4>2. 判断推理·高分秒杀模型</h4>
+          <ul>
+            <li><strong>翻译推理</strong>：如果……就……（前推后）；只有……才……（后推前）；逆否等价：「A→B」等价于「非B→非A」；德摩根定律：非(A且B) = 非A 或 非B。</li>
+            <li><strong>图形推理观察次序</strong>：特征图形找属性（对称、曲直、开闭）→ 规则图形数面/线 → 散乱图形数素/交点 → 黑白点看位置平移或黑白叠加。</li>
+            <li><strong>定义判断解题四步法</strong>：圈主体、划客体、标条件目的、比对核心修饰词。</li>
+            <li><strong>削弱与加强</strong>：最强削弱：因果倒置、另有他因、否定论点；最强加强：建立联系（搭桥）、排除他因、解释因果。</li>
+          </ul>
+        </div>
+        <div class="cheat-card">
+          <h4>3. 申论·高分答题黄金法则</h4>
+          <ul>
+            <li><strong>申论本质</strong>：答案全部在材料里！客观题目“踩点给分”，不要凭空自由发挥，抓材料关键词并分条归纳。</li>
+            <li><strong>综合分析题结构</strong>：① 点明本质/亮明观点 → ② 结合材料多角度深入论证分析（成绩、问题、原因、影响）→ ③ 给出结论或提出解决对策。</li>
+            <li><strong>贯彻执行题（应用文）</strong>：看清发文身份与受众；注意公文五要素（标题、主送称呼、正文背景+主体内容、结语、落款署名与日期）。</li>
+            <li><strong>大作文基层实操</strong>：从西部计划志愿经历切入，善用“以党建引领基层治理”、“打通政策落地最后一公里”、“赋能乡村特色产业”、“激发群众内生动力”等规范官方表述。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 弹窗二：西部计划报考政策与加分指南 Modal -->
+  <div class="modal-overlay" id="modal-policy">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h3 class="modal-title">📜 西部计划志愿者公考核心政策红利与报考锦囊</h3>
+        <button class="modal-close-btn" id="modal-close-policy">✕</button>
+      </div>
+      <div class="cheat-sheet-grid">
+        <div class="cheat-card" style="border-left: 4px solid var(--rose);">
+          <h4>⏰ 关键考试时间节点（务必以官方最新公告为准）</h4>
+          <ul>
+            <li><strong>2027年度国考</strong>：报名时间为 <strong>2026年10月14日8:00 至 10月24日18:00</strong>，报名与专题网站为 <a href="http://bm.scs.gov.cn/kl2027" target="_blank" rel="noopener">bm.scs.gov.cn/kl2027</a>（国家公务员局主办）；笔试时间以公告为准，近年多安排在11月下旬。</li>
+            <li><strong>省考联考</strong>：多数省份次年1-2月报名、3月前后笔试，请持续关注目标省份人事考试网/组织部门公告。</li>
+            <li><strong>本100天计划的定位</strong>：完整覆盖省考联考备考周期并兼顾长期能力建设；若你符合报考条件并报名了2027国考，可把它当作一次宝贵的全真实战（对应计划 Day 40 前后的模考阶段），重心放在明年省考。</li>
+            <li><strong>西部计划专项岗</strong>：国考职位表中标注「服务基层项目人员定向招录」的职位方可使用你的定向身份报考，报名前仔细核对职位表备注栏。</li>
+          </ul>
+        </div>
+        <div class="cheat-card" style="border-left: 4px solid var(--accent-primary);">
+          <h4>一、专属“服务基层项目人员”定向招录岗位（最大降维打击）</h4>
+          <p>国考及各省公务员考试每年均从考录计划中拿出一定比例的职位，专门面向包括“大学生志愿服务西部计划”、“三支一扶”、“特岗教师”等服务基层项目人员定向招录（如 2026 年度国考安排了 3000 余个定向计划，服务基层项目人员与服役满 5 年的高校毕业生退役士兵共享）。</p>
+          <ul>
+            <li><strong>竞争比显著降低</strong>：定向岗位仅限服务基层项目人员报考，竞争者范围远小于社会“三不限”岗位，进面难度普遍更低（具体竞争比以当年职位表为准）。</li>
+            <li><strong>报名门槛保护</strong>：非基层项目人员无法报考该类岗位，竞争对手全为同类志愿者。</li>
+          </ul>
+        </div>
+        <div class="cheat-card" style="border-left: 4px solid var(--success);">
+          <h4>二、应届毕业生身份保留与认定优势</h4>
+          <p>按有关部门规定：西部计划志愿者服务期满（1-3年）且考核合格后，在一定年限内（多数招考口径为 <strong>2 年内</strong>，具体以当年招考公告为准）：</p>
+          <ul>
+            <li>在考录公务员、参加事业单位招聘时，<strong>可按应届高校毕业生身份对待</strong>。</li>
+            <li>这意味着你不仅可以报考“服务基层项目定向岗”，还能同时报考各类限制“仅限应届毕业生”的高质量优质岗位！</li>
+          </ul>
+        </div>
+        <div class="cheat-card" style="border-left: 4px solid var(--purple);">
+          <h4>三、事业单位考试笔试加分政策</h4>
+          <p>在部分省份（特别是中西部省份）的事业单位公开招聘中：</p>
+          <ul>
+            <li>服务期满考核合格的西部计划志愿者，可享受笔试加分或同等条件下优先聘用（各省规定不一，以当地当年公告为准；有加分政策的省份常见分值为 2-5 分）。</li>
+          </ul>
+        </div>
+        <div class="cheat-card" style="border-left: 4px solid var(--warning);">
+          <h4>四、资格复审与证书准备清单（提前备齐）</h4>
+          <ul>
+            <li>1. 《大学生志愿服务西部计划志愿服务证》（由全国项目办统一印发，需盖省项目办章）。</li>
+            <li>2. 《志愿服务鉴定表》（服务期满考核表，由服务县项目办、用人单位签署鉴定意见并盖章）。</li>
+            <li>3. 服务期满考核合格证明材料。</li>
+            <li>4. 身份证、学历学位证书、党员证明（如岗位要求）。</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 引入核心业务逻辑与 100 天全量数据 -->
+  <script src="app.js"></script>
+</body>
+</html>

@@ -3518,28 +3518,215 @@ function tipOf(day) {
 
 function totalMin(day) { return day.w + day.p + day.r; }
 
-/* ---------- 顶部统计仪表盘 ---------- */
+/* ---------- 顶部极简进度条与快速跳天器（零日历占位） ---------- */
+let selectedDay = currentDay();
+
 function renderStats() {
   const doneCount = Object.keys(state.done).filter((k) => state.done[k]).length;
   const totalHours = PLAN.reduce((acc, day) => (state.done[day.d] ? acc + totalMin(day) : acc), 0) / 60;
 
-  $("stat-completed-days").textContent = doneCount;
-  $("stat-total-hours").textContent = totalHours.toFixed(1);
+  if ($("stat-completed-days")) $("stat-completed-days").textContent = doneCount;
+  if ($("stat-total-hours")) $("stat-total-hours").textContent = totalHours.toFixed(1);
 
   const cd = currentDay();
   const phase = dayData(cd).ph;
-  $("stat-current-phase").textContent = PHASES[phase].name;
-  $("stat-remaining-days").textContent = Math.max(0, 100 - doneCount);
+  if ($("stat-current-phase")) $("stat-current-phase").textContent = PHASES[phase].name;
+  if ($("stat-remaining-days")) $("stat-remaining-days").textContent = Math.max(0, 100 - doneCount);
 
-  const pct = doneCount / 100;
-  $("stat-progress-pct").textContent = Math.round(pct * 100) + "%";
-  const C = 276.46;
-  $("progress-circle").style.strokeDashoffset = String(C * (1 - pct));
+  const pct = Math.round((doneCount / 100) * 100);
+  if ($("stat-progress-pct")) $("stat-progress-pct").textContent = pct + "%";
+  if ($("mini-progress-fill")) $("mini-progress-fill").style.width = pct + "%";
+
+  renderDayDropdown();
+}
+
+function renderDayDropdown() {
+  const sel = $("day-select-dropdown");
+  if (!sel) return;
+  sel.innerHTML = "";
+  const cd = currentDay();
+  Object.keys(PHASES).forEach((phKey) => {
+    const ph = PHASES[phKey];
+    const grp = document.createElement("optgroup");
+    grp.label = ph.name + " · " + ph.desc + " (Day " + ph.range[0] + "-" + ph.range[1] + ")";
+    for (let d = ph.range[0]; d <= ph.range[1]; d++) {
+      const day = dayData(d);
+      const opt = document.createElement("option");
+      opt.value = String(d);
+      const doneMark = state.done[d] ? "✓ " : "   ";
+      const todayMark = d === cd ? " [今日]" : "";
+      opt.textContent = doneMark + "Day " + pad2(d) + " · [" + day.m + "] " + day.t + todayMark;
+      if (d === selectedDay) opt.selected = true;
+      grp.appendChild(opt);
+    }
+    sel.appendChild(grp);
+  });
+}
+
+/* ---------- 思维导图智能匹配与树形渲染引擎 ---------- */
+function matchMindMapForDay(day) {
+  const list = window.MINDMAPS || [];
+  if (!list.length) return null;
+  const m = day.m;
+  const t = day.t || "";
+
+  let targetId = "zlfx";
+  if (m === "资料分析") {
+    targetId = "zlfx";
+  } else if (m === "判断推理") {
+    if (/图形|位置|样式|属性|数量规律|立体|空间|六面体|截面|三视图|图推/.test(t)) targetId = "pdtl_tx";
+    else if (/定义/.test(t)) targetId = "pdtl_dy";
+    else if (/类比/.test(t)) targetId = "pdtl_lb";
+    else targetId = "pdtl_lj";
+  } else if (m === "言语理解") {
+    if (/排序|语句填空|接语|下文|语句表达/.test(t)) targetId = "yy_yj";
+    else if (/逻辑填空|实词|成语|词义|虚词/.test(t)) targetId = "yy_tk";
+    else targetId = "yy_yd";
+  } else if (m === "数量关系") {
+    if (/数字推理/.test(t)) targetId = "slgx_sz";
+    else targetId = "slgx";
+  } else if (m === "申论") {
+    targetId = "shenlun";
+  } else if (m === "常识政治") {
+    if (/法/.test(t)) targetId = "cs_fl";
+    else if (/经济|科技|地理|历史|人文|文化|物理|生物/.test(t)) targetId = "cs_jj";
+    else targetId = "cs_zz";
+  } else if (m === "复盘模考") {
+    if (/资料/.test(t)) targetId = "zlfx";
+    else if (/判断|图推|逻辑/.test(t)) targetId = "pdtl_lj";
+    else if (/言语/.test(t)) targetId = "yy_yd";
+    else if (/数量/.test(t)) targetId = "slgx";
+    else if (/申论/.test(t)) targetId = "shenlun";
+    else targetId = "zlfx";
+  }
+  return list.find((x) => x.id === targetId) || list[0];
+}
+
+function scoreBranchMatch(branch, textToMatch) {
+  let score = 0;
+  function walk(node, weight) {
+    const label = (node.t || "").replace(/[【】（）()]/g, "");
+    if (label && label.length >= 2) {
+      if (textToMatch.includes(label)) score += weight * 3;
+      else {
+        for (let i = 0; i <= label.length - 2; i++) {
+          const sub = label.slice(i, i + 2);
+          if (!/^[公式识别速算方法特征概念考点问题关系]$/.test(sub) && textToMatch.includes(sub)) {
+            score += weight;
+          }
+        }
+      }
+    }
+    (node.c || []).forEach((ch) => walk(ch, Math.max(1, weight - 1)));
+  }
+  walk(branch, 4);
+  return score;
+}
+
+function renderMindMapNodesHTML(nodes, depth) {
+  if (!nodes || !nodes.length) return "";
+  return '<ul class="mm-node-list mm-depth-' + depth + '">' + nodes.map((n) => {
+    const hasChildren = n.c && n.c.length > 0;
+    const isFormula = /【.*】|=|÷|×|→|＞|＜|≤|≥/.test(n.t || "");
+    const cls = "mm-node-pill" + (isFormula ? " is-formula" : "") + (depth === 0 ? " is-branch-root" : "");
+    return '<li class="mm-node-item">'
+      + '<div class="' + cls + '">' + n.t + '</div>'
+      + (hasChildren ? renderMindMapNodesHTML(n.c, depth + 1) : "")
+      + '</li>';
+  }).join("") + '</ul>';
+}
+
+let currentDailyMM = null;
+let currentDailyBranchIdx = 0;
+
+function renderDailyMindMap(day) {
+  const mm = matchMindMapForDay(day);
+  if (!mm) return;
+  currentDailyMM = mm;
+
+  if ($("daily-mm-title")) $("daily-mm-title").textContent = mm.name + "（自动联动 Day " + pad2(day.d) + "）";
+  if ($("daily-mm-source")) $("daily-mm-source").textContent = "导图来源：" + mm.source;
+
+  const branches = (mm.tree && mm.tree.c) || [];
+  const matchPool = day.t + " " + (day.k || []).join(" ");
+  let bestIdx = 0;
+  let bestScore = -1;
+  const scores = branches.map((b, idx) => {
+    const sc = scoreBranchMatch(b, matchPool);
+    if (sc > bestScore) {
+      bestScore = sc;
+      bestIdx = idx;
+    }
+    return sc;
+  });
+
+  currentDailyBranchIdx = bestIdx;
+  drawDailyMindMapBranches(mm, branches, scores, currentDailyBranchIdx);
+}
+
+function drawDailyMindMapBranches(mm, branches, scores, activeIdx) {
+  const tabsEl = $("daily-mm-branch-tabs");
+  const bodyEl = $("daily-mm-tree-body");
+  if (!tabsEl || !bodyEl) return;
+
+  tabsEl.innerHTML = "";
+  const allBtn = document.createElement("button");
+  allBtn.type = "button";
+  allBtn.className = "mm-branch-btn" + (activeIdx === -1 ? " active" : "");
+  allBtn.textContent = "🌟 展开模块全部分支 (" + branches.length + ")";
+  allBtn.addEventListener("click", () => drawDailyMindMapBranches(mm, branches, scores, -1));
+  tabsEl.appendChild(allBtn);
+
+  const maxSc = Math.max(...scores, 0);
+  branches.forEach((b, idx) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const isRecommended = maxSc > 0 && scores[idx] === maxSc;
+    btn.className = "mm-branch-btn" + (activeIdx === idx ? " active" : "") + (isRecommended ? " is-today-match" : "");
+    btn.innerHTML = (isRecommended ? "🎯 " : "") + b.t;
+    btn.addEventListener("click", () => drawDailyMindMapBranches(mm, branches, scores, idx));
+    tabsEl.appendChild(btn);
+  });
+
+  const targetBranches = activeIdx === -1 ? branches : [branches[activeIdx]].filter(Boolean);
+  bodyEl.innerHTML = '<div class="mm-tree-grid">' + targetBranches.map((b) => {
+    return '<div class="mm-branch-card">'
+      + '<div class="mm-branch-header"><span class="mm-root-tag">' + (mm.tree.t || mm.module) + '</span><span class="mm-arrow">▸</span><strong class="mm-branch-name">' + b.t + '</strong></div>'
+      + '<div class="mm-branch-content">' + renderMindMapNodesHTML(b.c || [], 1) + '</div>'
+      + '</div>';
+  }).join("") + '</div>';
+}
+
+/* ---------- 每日权威文字讲义摘录联动引擎（developer2gwy & zhangxiangliang） ---------- */
+function renderDailyDocExcerpt(day) {
+  const map = window.DOC_EXCERPTS || {};
+  let key = day.m;
+  if (day.m === "判断推理") {
+    key = /图形|位置|样式|属性|数量规律|立体|空间|六面体|截面|三视图|图推/.test(day.t) ? "判断推理_图推" : "判断推理_逻辑";
+  }
+  const ex = map[key] || map["复盘模考"] || {};
+
+  if ($("daily-doc-title")) {
+    $("daily-doc-title").textContent = "「" + day.m + " · " + day.t + "」配套开源文字讲义与原文片段";
+  }
+  if ($("daily-doc-repo-link") && ex.repoUrl) {
+    $("daily-doc-repo-link").href = ex.repoUrl;
+  }
+  if ($("daily-doc-pointer")) {
+    $("daily-doc-pointer").innerHTML = ex.pointer || "";
+  }
+  if ($("daily-doc-body")) {
+    const todayDigest = '<div class="today-digest-banner">'
+      + '<div class="digest-head">🎯 今日课题（' + day.t + '）核心思路与方法提炼</div>'
+      + '<div class="digest-steps">'
+      + day.k.map((item, idx) => '<div class="digest-step-item"><span class="digest-step-num">核心 ' + (idx + 1) + '</span><div>' + item + '</div></div>').join("")
+      + '</div>'
+      + '</div>';
+    $("daily-doc-body").innerHTML = todayDigest + (ex.html || "");
+  }
 }
 
 /* ---------- 今日核心工作台渲染 ---------- */
-let selectedDay = currentDay();
-
 function updateChecklistBadge(d) {
   const day = dayData(d);
   const saved = state.checks[d] || [];
@@ -3570,6 +3757,7 @@ function renderFocus(d) {
 
   if ($("btn-prev-day")) $("btn-prev-day").disabled = (d <= 1);
   if ($("btn-next-day")) $("btn-next-day").disabled = (d >= 100);
+  if ($("day-select-dropdown")) $("day-select-dropdown").value = String(d);
 
   $("detail-time-watch").textContent = day.w + " 分钟";
   $("detail-time-practice").textContent = day.p + " 分钟";
@@ -3630,175 +3818,228 @@ function renderFocus(d) {
   $("btn-toggle-complete").classList.toggle("completed", isDone);
   $("complete-icon").textContent = isDone ? "✓" : "○";
   $("complete-btn-text").textContent = isDone ? "今日已完成打卡（点击可撤销）" : "完成今日学习并打卡";
-}
 
-/* ---------- 紧凑型百日备考进度轨（Ribbon） ---------- */
-function renderRibbon() {
-  const container = $("ribbon-phases-container");
-  if (!container) return;
-  container.innerHTML = "";
-  const cd = currentDay();
-  const frag = document.createDocumentFragment();
-
-  Object.keys(PHASES).forEach((phKey) => {
-    const ph = PHASES[phKey];
-    const [startD, endD] = ph.range;
-    let doneInPhase = 0;
-    for (let d = startD; d <= endD; d++) {
-      if (state.done[d]) doneInPhase++;
-    }
-
-    const group = document.createElement("div");
-    group.className = "ribbon-phase-group";
-
-    const head = document.createElement("div");
-    head.className = "ribbon-phase-head";
-    head.innerHTML = "<span>" + ph.name + "</span><span class=\"cnt\">" + doneInPhase + "/" + (endD - startD + 1) + "天</span>";
-
-    const dots = document.createElement("div");
-    dots.className = "ribbon-dots";
-
-    for (let d = startD; d <= endD; d++) {
-      const day = dayData(d);
-      const dot = document.createElement("button");
-      dot.type = "button";
-      dot.className = "ribbon-dot"
-        + (state.done[d] ? " done" : "")
-        + (d === cd ? " today" : "")
-        + (d === selectedDay ? " selected" : "");
-      dot.dataset.day = String(d);
-      dot.title = "Day " + pad2(d) + " · " + day.m + " · " + day.t;
-      dot.textContent = String(d);
-      dot.addEventListener("click", () => selectDay(d, false));
-      dots.appendChild(dot);
-    }
-
-    group.appendChild(head);
-    group.appendChild(dots);
-    frag.appendChild(group);
-  });
-
-  container.appendChild(frag);
-}
-
-/* ---------- 可折叠日程抽屉（列表与网格） ---------- */
-let phaseFilter = "all";
-let moduleFilter = "all";
-let viewMode = "list";
-let drawerOpen = false;
-
-function passFilter(day) {
-  if (phaseFilter !== "all" && String(day.ph) !== phaseFilter) return false;
-  if (moduleFilter !== "all" && day.m !== moduleFilter) return false;
-  return true;
-}
-
-function renderGrid() {
-  const grid = $("days-grid-container");
-  if (!grid) return;
-  grid.innerHTML = "";
-  const cd = currentDay();
-  const frag = document.createDocumentFragment();
-  PLAN.forEach((day) => {
-    if (!passFilter(day)) return;
-    const cell = document.createElement("div");
-    cell.className = "day-cell"
-      + (state.done[day.d] ? " done" : "")
-      + (day.d === cd ? " active-today" : "")
-      + (day.d === selectedDay ? " selected" : "");
-    cell.dataset.day = String(day.d);
-    cell.title = "Day " + pad2(day.d) + " · " + day.m + " · " + day.t;
-    const num = document.createElement("span");
-    num.className = "day-num";
-    num.textContent = String(day.d);
-    const mod = document.createElement("span");
-    mod.className = "cell-module";
-    mod.textContent = SHORT_MOD[day.m] || day.m;
-    const dot = document.createElement("span");
-    dot.className = "cell-status-dot";
-    cell.appendChild(num);
-    cell.appendChild(mod);
-    cell.appendChild(dot);
-    cell.addEventListener("click", () => selectDay(day.d, true));
-    frag.appendChild(cell);
-  });
-  grid.appendChild(frag);
-}
-
-function renderList() {
-  const list = $("days-list-container");
-  if (!list) return;
-  list.innerHTML = "";
-  const frag = document.createDocumentFragment();
-  PLAN.forEach((day) => {
-    if (!passFilter(day)) return;
-    const item = document.createElement("div");
-    item.className = "list-item"
-      + (state.done[day.d] ? " done" : "")
-      + (day.d === selectedDay ? " selected" : "");
-    item.dataset.day = String(day.d);
-
-    const left = document.createElement("div");
-    left.className = "list-left";
-    const num = document.createElement("div");
-    num.className = "list-day-num";
-    num.textContent = "Day " + pad2(day.d);
-    const box = document.createElement("div");
-    box.className = "list-title-box";
-    const t = document.createElement("div");
-    t.className = "l-title";
-    t.textContent = day.t;
-    const desc = document.createElement("div");
-    desc.className = "l-desc";
-    desc.textContent = day.m + " · " + day.c[0] + " · 约" + (totalMin(day) / 60).toFixed(1) + "小时";
-    box.appendChild(t);
-    box.appendChild(desc);
-    left.appendChild(num);
-    left.appendChild(box);
-
-    const right = document.createElement("div");
-    right.className = "list-right";
-    const pill = document.createElement("span");
-    pill.className = "module-pill";
-    pill.textContent = day.m;
-    right.appendChild(pill);
-    if (state.done[day.d]) {
-      const ok = document.createElement("span");
-      ok.style.cssText = "color:var(--success);font-weight:800;";
-      ok.textContent = "✓";
-      right.appendChild(ok);
-    }
-
-    item.appendChild(left);
-    item.appendChild(right);
-    item.addEventListener("click", () => selectDay(day.d, true));
-    frag.appendChild(item);
-  });
-  list.appendChild(frag);
+  /* 联动渲染今日思维导图与权威文字资料摘录 */
+  renderDailyMindMap(day);
+  renderDailyDocExcerpt(day);
 }
 
 function selectDay(d, scrollToTop) {
   selectedDay = Math.min(100, Math.max(1, d));
   renderFocus(selectedDay);
-  renderRibbon();
-  renderGrid();
-  renderList();
   if (scrollToTop && $("today-focus-panel")) {
     $("today-focus-panel").scrollIntoView({ behavior: "smooth", block: "start" });
   }
 }
 
-function toggleDrawer(forceState) {
-  drawerOpen = typeof forceState === "boolean" ? forceState : !drawerOpen;
-  const drawer = $("schedule-drawer");
-  if (!drawer) return;
-  drawer.classList.toggle("open", drawerOpen);
-  if ($("drawer-toggle-text")) {
-    $("drawer-toggle-text").textContent = drawerOpen ? "收起完整日程表 ▴" : "展开完整日程与科目筛选 ▾";
+/* ---------- 视图 2：全科思维导图全景库 ---------- */
+let globalMMIdx = 0;
+let globalBranchIdx = -1;
+
+function initGlobalMindMapsView() {
+  const list = window.MINDMAPS || [];
+  const selEl = $("global-mm-selector");
+  if (!selEl || !list.length) return;
+
+  function renderSelector() {
+    selEl.innerHTML = "";
+    list.forEach((mm, idx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mm-mod-card" + (idx === globalMMIdx ? " active" : "");
+      btn.innerHTML = '<span class="mm-mod-tag">' + mm.module + '</span><strong>' + mm.name.replace(/^.*?·/, "") + '</strong>';
+      btn.addEventListener("click", () => {
+        globalMMIdx = idx;
+        globalBranchIdx = -1;
+        renderSelector();
+        renderGlobalMMBody();
+      });
+      selEl.appendChild(btn);
+    });
   }
-  if (drawerOpen) {
-    drawer.scrollIntoView({ behavior: "smooth", block: "nearest" });
+
+  function renderGlobalMMBody() {
+    const mm = list[globalMMIdx];
+    if (!mm) return;
+    const branches = (mm.tree && mm.tree.c) || [];
+    if ($("global-mm-current-name")) $("global-mm-current-name").textContent = mm.name;
+    if ($("global-mm-current-meta")) $("global-mm-current-meta").textContent = "数据来源：" + mm.source + " · 共 " + branches.length + " 个一级分支";
+
+    const tabsEl = $("global-mm-branch-tabs");
+    const bodyEl = $("global-mm-tree-body");
+    if (!tabsEl || !bodyEl) return;
+
+    tabsEl.innerHTML = "";
+    const allBtn = document.createElement("button");
+    allBtn.type = "button";
+    allBtn.className = "mm-branch-btn" + (globalBranchIdx === -1 ? " active" : "");
+    allBtn.textContent = "🌟 全部展开 (" + branches.length + ")";
+    allBtn.addEventListener("click", () => {
+      globalBranchIdx = -1;
+      renderGlobalMMBody();
+    });
+    tabsEl.appendChild(allBtn);
+
+    branches.forEach((b, bIdx) => {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "mm-branch-btn" + (globalBranchIdx === bIdx ? " active" : "");
+      btn.textContent = b.t;
+      btn.addEventListener("click", () => {
+        globalBranchIdx = bIdx;
+        renderGlobalMMBody();
+      });
+      tabsEl.appendChild(btn);
+    });
+
+    const shown = globalBranchIdx === -1 ? branches : [branches[globalBranchIdx]].filter(Boolean);
+    bodyEl.innerHTML = '<div class="mm-tree-grid">' + shown.map((b) => {
+      return '<div class="mm-branch-card">'
+        + '<div class="mm-branch-header"><span class="mm-root-tag">' + (mm.tree.t || mm.module) + '</span><span class="mm-arrow">▸</span><strong class="mm-branch-name">' + b.t + '</strong></div>'
+        + '<div class="mm-branch-content">' + renderMindMapNodesHTML(b.c || [], 1) + '</div>'
+        + '</div>';
+    }).join("") + '</div>';
   }
+
+  if ($("btn-global-mm-expand-all")) {
+    $("btn-global-mm-expand-all").addEventListener("click", () => {
+      globalBranchIdx = -1;
+      renderGlobalMMBody();
+    });
+  }
+  if ($("btn-global-mm-view-png")) {
+    $("btn-global-mm-view-png").addEventListener("click", () => {
+      const mm = list[globalMMIdx];
+      if (mm && mm.png) openLightbox(mm.name, mm.png);
+    });
+  }
+
+  /* 原版高清 PNG 画廊 */
+  const galEl = $("png-gallery-grid");
+  if (galEl && window.PNG_GALLERY) {
+    galEl.innerHTML = window.PNG_GALLERY.map((item) => {
+      return '<div class="png-thumb-card" data-src="' + item.src + '" data-title="' + item.title + '">'
+        + '<div class="png-thumb-top"><span class="module-pill">' + item.mod + '</span><span class="png-repo-tag">' + item.repo + '</span></div>'
+        + '<div class="png-thumb-title">' + item.title + '</div>'
+        + '<div class="png-thumb-action">点击放大查看原图 ↗</div>'
+        + '</div>';
+    }).join("");
+    galEl.querySelectorAll(".png-thumb-card").forEach((card) => {
+      card.addEventListener("click", () => openLightbox(card.dataset.title, card.dataset.src));
+    });
+  }
+
+  renderSelector();
+  renderGlobalMMBody();
+}
+
+/* ---------- 视图 3：D2G 权威文字资料文库 ---------- */
+let activeArticleIdx = 0;
+
+function initLibraryView() {
+  const articles = window.LIBRARY_ARTICLES || [];
+  const navEl = $("library-nav-list");
+  const viewEl = $("library-article-viewer");
+  if (!navEl || !viewEl || !articles.length) return;
+
+  function renderLib() {
+    navEl.innerHTML = articles.map((art, idx) => {
+      return '<button type="button" class="lib-nav-item' + (idx === activeArticleIdx ? ' active' : '') + '" data-idx="' + idx + '">'
+        + '<span class="lib-cat-tag">' + art.cat + '</span>'
+        + '<span class="lib-item-title">' + art.title + '</span>'
+        + '</button>';
+    }).join("");
+
+    navEl.querySelectorAll(".lib-nav-item").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        activeArticleIdx = Number(btn.dataset.idx);
+        renderLib();
+      });
+    });
+
+    const cur = articles[activeArticleIdx];
+    viewEl.innerHTML = '<div class="lib-article-head">'
+      + '<div class="lib-meta-row"><span class="deep-badge doc-badge">' + cur.cat + '</span><span class="lib-source-text">来源仓库：<code>' + cur.source + '</code></span>'
+      + '<a class="btn btn-xs btn-subtle" href="' + cur.url + '" target="_blank" rel="noopener">查看 GitHub 原文档 ↗</a></div>'
+      + '<h2 class="lib-article-title">' + cur.title + '</h2>'
+      + '</div>'
+      + '<div class="lib-article-body">' + cur.content + '</div>';
+  }
+
+  renderLib();
+}
+
+/* ---------- 视图 4：结构化面试与上岸全流程专区 ---------- */
+function initInterviewView() {
+  const data = window.INTERVIEW_ZONE || {};
+  const tabs = document.querySelectorAll("#interview-subtabs .int-tab");
+  const body = $("interview-content-body");
+  if (!body) return;
+
+  function showTab(key) {
+    tabs.forEach((t) => t.classList.toggle("active", t.dataset.int === key));
+    body.innerHTML = data[key] || "";
+  }
+
+  tabs.forEach((btn) => {
+    btn.addEventListener("click", () => showTab(btn.dataset.int));
+  });
+
+  if ($("btn-view-interview-png")) {
+    $("btn-view-interview-png").addEventListener("click", () => {
+      openLightbox("结构化面试 · 10大题型完整原版思维导图 (kuriv/civil-service-exam)", "assets/mindmaps/kuriv/面试.png");
+    });
+  }
+
+  showTab("types");
+}
+
+/* ---------- 顶部四大主视图切换 ---------- */
+function switchMainView(viewName) {
+  document.querySelectorAll("#main-view-tabs .main-tab").forEach((btn) => {
+    btn.classList.toggle("active", btn.dataset.view === viewName);
+  });
+  document.querySelectorAll(".view-section").forEach((sec) => {
+    sec.classList.toggle("active", sec.id === "view-" + viewName);
+  });
+  window.scrollTo({ top: 0, behavior: "smooth" });
+}
+
+document.querySelectorAll("#main-view-tabs .main-tab").forEach((btn) => {
+  btn.addEventListener("click", () => switchMainView(btn.dataset.view));
+});
+
+if ($("btn-jump-all-mindmaps")) {
+  $("btn-jump-all-mindmaps").addEventListener("click", () => switchMainView("mindmaps"));
+}
+if ($("btn-jump-library")) {
+  $("btn-jump-library").addEventListener("click", () => switchMainView("library"));
+}
+
+/* ---------- 高清思维导图 PNG 灯箱预览 ---------- */
+function openLightbox(title, src) {
+  if (!$("modal-mm-image")) return;
+  $("modal-mm-image-title").textContent = title || "思维导图高清原图预览";
+  $("modal-mm-image-el").src = src;
+  $("modal-mm-image-raw").href = src;
+  $("modal-mm-image").classList.add("open");
+}
+
+if ($("btn-open-mm-image")) {
+  $("btn-open-mm-image").addEventListener("click", () => {
+    if (currentDailyMM && currentDailyMM.png) {
+      openLightbox(currentDailyMM.name + "（原版高清导图）", currentDailyMM.png);
+    }
+  });
+}
+
+if ($("modal-close-mm-image")) {
+  $("modal-close-mm-image").addEventListener("click", () => $("modal-mm-image").classList.remove("open"));
+}
+if ($("modal-mm-image")) {
+  $("modal-mm-image").addEventListener("click", (e) => {
+    if (e.target === $("modal-mm-image")) $("modal-mm-image").classList.remove("open");
+  });
 }
 
 /* ---------- Toast 轻提示 ---------- */
@@ -3826,7 +4067,8 @@ $("btn-toggle-complete").addEventListener("click", () => {
   const willDone = !state.done[d];
   state.done[d] = willDone;
   save();
-  renderStats(); renderRibbon(); renderGrid(); renderList(); renderFocus(d);
+  renderStats();
+  renderFocus(d);
   if (willDone) {
     const left = 100 - Object.keys(state.done).filter((k) => state.done[k]).length;
     toast("Day " + pad2(d) + " 打卡成功！百日计划还剩 " + left + " 天 💪");
@@ -3847,25 +4089,27 @@ if ($("btn-next-day")) {
   });
 }
 
+if ($("day-select-dropdown")) {
+  $("day-select-dropdown").addEventListener("change", (e) => {
+    const d = Number(e.target.value);
+    if (d >= 1 && d <= 100) {
+      switchMainView("daily");
+      selectDay(d, false);
+    }
+  });
+}
+
 $("btn-jump-today").addEventListener("click", () => {
   const cd = currentDay();
   selectDay(cd, false);
   toast("已回到今日任务：Day " + pad2(cd));
 });
 
-if ($("btn-toggle-drawer")) {
-  $("btn-toggle-drawer").addEventListener("click", () => toggleDrawer());
-}
-
-if ($("btn-toggle-schedule-top")) {
-  $("btn-toggle-schedule-top").addEventListener("click", () => toggleDrawer(true));
-}
-
 /* 键盘左右方向键快捷切换天数 */
 document.addEventListener("keydown", (e) => {
   const tag = (e.target && e.target.tagName) || "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-  if ($("modal-cheatsheet").classList.contains("open") || $("modal-policy").classList.contains("open")) return;
+  if ($("modal-cheatsheet").classList.contains("open") || $("modal-policy").classList.contains("open") || ($("modal-mm-image") && $("modal-mm-image").classList.contains("open"))) return;
   if (e.key === "ArrowLeft" && selectedDay > 1) {
     selectDay(selectedDay - 1, false);
   } else if (e.key === "ArrowRight" && selectedDay < 100) {
@@ -3883,41 +4127,6 @@ $("detail-notes-input").addEventListener("input", (e) => {
   }, 400);
 });
 
-/* ---------- 筛选与视图切换 ---------- */
-document.querySelectorAll("#phase-tabs-container .tab-btn").forEach((btn) => {
-  btn.addEventListener("click", () => {
-    document.querySelectorAll("#phase-tabs-container .tab-btn").forEach((b) => b.classList.remove("active"));
-    btn.classList.add("active");
-    phaseFilter = btn.dataset.phase;
-    renderGrid(); renderList();
-  });
-});
-
-document.querySelectorAll("#module-filters-container .filter-tag").forEach((tag) => {
-  tag.addEventListener("click", () => {
-    document.querySelectorAll("#module-filters-container .filter-tag").forEach((t) => t.classList.remove("active"));
-    tag.classList.add("active");
-    moduleFilter = tag.dataset.module;
-    renderGrid(); renderList();
-  });
-});
-
-$("view-grid-btn").addEventListener("click", () => {
-  viewMode = "grid";
-  $("view-grid-btn").classList.add("active");
-  $("view-list-btn").classList.remove("active");
-  $("days-grid-container").style.display = "grid";
-  $("days-list-container").style.display = "none";
-});
-
-$("view-list-btn").addEventListener("click", () => {
-  viewMode = "list";
-  $("view-list-btn").classList.add("active");
-  $("view-grid-btn").classList.remove("active");
-  $("days-grid-container").style.display = "none";
-  $("days-list-container").style.display = "grid";
-});
-
 /* ---------- 主题切换 ---------- */
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
@@ -3932,6 +4141,7 @@ $("btn-theme-toggle").addEventListener("click", () => {
 
 /* ---------- 弹窗 ---------- */
 function bindModal(openBtn, closeBtn, overlay) {
+  if (!$(openBtn) || !$(closeBtn) || !$(overlay)) return;
   $(openBtn).addEventListener("click", () => $(overlay).classList.add("open"));
   $(closeBtn).addEventListener("click", () => $(overlay).classList.remove("open"));
   $(overlay).addEventListener("click", (e) => { if (e.target === $(overlay)) $(overlay).classList.remove("open"); });
@@ -3942,6 +4152,7 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") {
     $("modal-cheatsheet").classList.remove("open");
     $("modal-policy").classList.remove("open");
+    if ($("modal-mm-image")) $("modal-mm-image").classList.remove("open");
   }
 });
 
@@ -3959,11 +4170,13 @@ function fmtTime(sec) {
 }
 
 function renderTimer() {
-  $("timer-display").textContent = fmtTime(timerLeft);
+  if ($("timer-display")) $("timer-display").textContent = fmtTime(timerLeft);
   const mins = Math.round(((state.focus[todayKey()] || 0)) / 60);
-  $("timer-status-text").textContent = timerRunning
-    ? "专注计时中 · 今日已累计专注 " + mins + " 分钟"
-    : "专注时钟 " + TIMER_MODES[state.timerMode] + " 分钟 · 今日已专注 " + mins + " 分钟";
+  if ($("timer-status-text")) {
+    $("timer-status-text").textContent = timerRunning
+      ? "🍅 专注中 (今日" + mins + "m)"
+      : "🍅 专注 " + TIMER_MODES[state.timerMode] + "m (今日" + mins + "m)";
+  }
 }
 
 function stopInterval() {
@@ -3981,7 +4194,7 @@ $("timer-toggle-btn").addEventListener("click", () => {
     stopInterval();
     addFocus(focusAccum); focusAccum = 0;
     save();
-    $("timer-toggle-btn").innerHTML = "<span>▶ 继续专注</span>";
+    $("timer-toggle-btn").textContent = "▶ 继续";
   } else {
     timerRunning = true;
     focusAccum = 0;
@@ -3998,12 +4211,12 @@ $("timer-toggle-btn").addEventListener("click", () => {
         stopInterval();
         addFocus(focusAccum); focusAccum = 0; focusSaveTick = 0;
         save();
-        $("timer-toggle-btn").innerHTML = "<span>▶ 开始专注</span>";
+        $("timer-toggle-btn").textContent = "▶ 开始";
         toast("⏰ 本轮专注完成！起身活动 5 分钟吧");
       }
       renderTimer();
     }, 1000);
-    $("timer-toggle-btn").innerHTML = "<span>⏸ 暂停</span>";
+    $("timer-toggle-btn").textContent = "⏸ 暂停";
   }
   renderTimer();
 });
@@ -4013,7 +4226,7 @@ $("timer-reset-btn").addEventListener("click", () => {
   stopInterval();
   if (focusAccum > 0) { addFocus(focusAccum); focusAccum = 0; save(); }
   timerLeft = TIMER_MODES[state.timerMode] * 60;
-  $("timer-toggle-btn").innerHTML = "<span>▶ 开始专注</span>";
+  $("timer-toggle-btn").textContent = "▶ 开始";
   renderTimer();
 });
 
@@ -4023,7 +4236,7 @@ $("timer-mode-btn").addEventListener("click", () => {
   timerRunning = false;
   stopInterval();
   timerLeft = TIMER_MODES[state.timerMode] * 60;
-  $("timer-toggle-btn").innerHTML = "<span>▶ 开始专注</span>";
+  $("timer-toggle-btn").textContent = "▶ 开始";
   renderTimer();
   toast("已切换为 " + TIMER_MODES[state.timerMode] + " 分钟专注模式");
 });
@@ -4057,7 +4270,9 @@ $("file-import-input").addEventListener("change", (e) => {
       applyTheme(state.theme);
       timerLeft = TIMER_MODES[state.timerMode] * 60;
       selectedDay = currentDay();
-      renderStats(); renderFocus(selectedDay); renderRibbon(); renderGrid(); renderList(); renderTimer();
+      renderStats();
+      renderFocus(selectedDay);
+      renderTimer();
       toast("打卡数据导入成功");
     } catch (err) {
       toast("导入失败：请选择本系统导出的 JSON 备份文件");
@@ -4072,9 +4287,9 @@ function init() {
   if (PLAN.length !== 100) console.warn("计划数据不完整：当前", PLAN.length, "天");
   renderStats();
   renderFocus(selectedDay);
-  renderRibbon();
-  renderGrid();
-  renderList();
+  initGlobalMindMapsView();
+  initLibraryView();
+  initInterviewView();
   renderTimer();
 }
 

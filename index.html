@@ -2,7 +2,8 @@
 <html lang="zh-CN" data-theme="light">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#f4f6fb">
   <title>西部计划志愿者 100 天公考深度备考工作台 · 每日任务 × 思维导图 × D2G文库 × 面试专区</title>
   <link rel="stylesheet" href="style.css">
 </head>
@@ -12,53 +13,60 @@
   <nav class="navbar">
     <div class="nav-container">
       <div class="brand">
-        <div class="brand-icon">🎯</div>
+        <div class="brand-icon" aria-hidden="true">🎯</div>
         <div class="brand-title">
-          <span>100天公考深度备考台</span>
+          <span class="brand-name">100天公考深度备考台</span>
           <span class="badge-tag">西部计划专版</span>
         </div>
       </div>
 
       <!-- 四大核心工作区切换标签 -->
-      <div class="main-nav-tabs" id="main-view-tabs">
-        <button class="main-tab active" data-view="daily">
-          <span>🎯</span>
+      <div class="main-nav-tabs" id="main-view-tabs" role="tablist" aria-label="工作区">
+        <button class="main-tab active" data-view="daily" role="tab" aria-selected="true">
+          <span class="tab-ico" aria-hidden="true">🎯</span>
           <span>今日深度学习</span>
         </button>
-        <button class="main-tab" data-view="mindmaps">
-          <span>🧠</span>
+        <button class="main-tab" data-view="mindmaps" role="tab" aria-selected="false">
+          <span class="tab-ico" aria-hidden="true">🧠</span>
           <span>全科思维导图</span>
         </button>
-        <button class="main-tab" data-view="library">
-          <span>📚</span>
+        <button class="main-tab" data-view="library" role="tab" aria-selected="false">
+          <span class="tab-ico" aria-hidden="true">📚</span>
           <span>D2G文字资料库</span>
         </button>
-        <button class="main-tab" data-view="interview">
-          <span>🎙️</span>
+        <button class="main-tab" data-view="interview" role="tab" aria-selected="false">
+          <span class="tab-ico" aria-hidden="true">🎙️</span>
           <span>面试与上岸专区</span>
         </button>
       </div>
 
-      <!-- 右侧工具按钮 -->
+      <!-- 右侧工具按钮。窄屏时次要操作收进「更多」菜单，主题切换保持一键可达 -->
       <div class="nav-actions">
-        <button class="btn btn-sm" id="btn-open-policy" title="西部计划报考政策与时间节点">
-          <span>📜</span>
-          <span>报考政策</span>
-        </button>
-        <button class="btn btn-sm" id="btn-open-cheatsheet" title="行测与申论核心公式速查">
-          <span>⚡</span>
-          <span>公式速查</span>
-        </button>
-        <button class="btn btn-icon" id="btn-theme-toggle" title="切换深浅色护眼模式">
+        <div class="nav-more" id="nav-more">
+          <button class="btn btn-sm" id="btn-open-policy" type="button" title="西部计划报考政策与时间节点">
+            <span aria-hidden="true">📜</span>
+            <span>报考政策</span>
+          </button>
+          <button class="btn btn-sm" id="btn-open-cheatsheet" type="button" title="行测与申论核心公式速查">
+            <span aria-hidden="true">⚡</span>
+            <span>公式速查</span>
+          </button>
+          <button class="btn btn-icon" id="btn-export-data" type="button" title="导出学习打卡备份" aria-label="导出学习打卡备份">
+            <span aria-hidden="true">💾</span>
+            <span class="btn-label">导出备份</span>
+          </button>
+          <button class="btn btn-icon" id="btn-import-data" type="button" title="导入学习打卡备份" aria-label="导入学习打卡备份">
+            <span aria-hidden="true">📂</span>
+            <span class="btn-label">导入备份</span>
+          </button>
+        </div>
+        <button class="btn btn-icon" id="btn-theme-toggle" type="button" title="切换深浅色护眼模式" aria-label="切换深浅色护眼模式">
           <span id="theme-icon">🌙</span>
         </button>
-        <button class="btn btn-icon" id="btn-export-data" title="导出学习打卡备份">
-          <span>💾</span>
+        <button class="btn btn-icon nav-menu-btn" id="btn-nav-menu" type="button" aria-expanded="false" aria-controls="nav-more" aria-label="更多操作">
+          <span class="hamburger" aria-hidden="true"><span></span><span></span><span></span></span>
         </button>
-        <button class="btn btn-icon" id="btn-import-data" title="导入学习打卡备份">
-          <span>📂</span>
-        </button>
-        <input type="file" id="file-import-input" accept=".json" style="display: none;">
+        <input type="file" id="file-import-input" accept=".json" hidden>
       </div>
     </div>
   </nav>
@@ -89,11 +97,13 @@
         </div>
 
         <div class="inline-timer">
-          <span class="timer-label" id="timer-status-text">🍅 专注 45m (今日0m)</span>
+          <span class="timer-label" id="timer-status-text">专注 45 分钟（今日 0 分钟）</span>
           <span class="timer-clock" id="timer-display">45:00</span>
-          <button class="btn btn-xs btn-primary" id="timer-toggle-btn">▶ 开始</button>
-          <button class="btn btn-xs" id="timer-reset-btn" title="重置计时">↺</button>
-          <button class="btn btn-xs" id="timer-mode-btn" title="切换25/45/60分钟">⏱</button>
+          <div class="timer-actions">
+            <button class="btn btn-xs btn-primary" id="timer-toggle-btn" type="button">开始</button>
+            <button class="btn btn-xs" id="timer-reset-btn" type="button" title="重置计时" aria-label="重置计时">重置</button>
+            <button class="btn btn-xs" id="timer-mode-btn" type="button" title="切换 25/45/60 分钟" aria-label="切换专注时长">时长</button>
+          </div>
         </div>
       </div>
     </div>
@@ -378,11 +388,18 @@
         </div>
 
         <div class="library-layout">
-          <!-- 左侧章节目录 -->
+          <div class="lib-mobile-bar">
+            <button class="btn lib-toc-toggle" id="btn-lib-toc" type="button" aria-expanded="false" aria-controls="library-nav-list">
+              <span>章节目录</span>
+              <span class="lib-toc-current" id="lib-toc-current">选择章节</span>
+            </button>
+          </div>
+          <!-- 左侧章节目录；窄屏时变为抽屉 -->
           <aside class="library-sidebar" id="library-nav-list"></aside>
           <!-- 右侧文章正文 -->
           <article class="library-reader" id="library-article-viewer"></article>
         </div>
+        <button class="drawer-backdrop" id="lib-drawer-backdrop" type="button" aria-label="关闭章节目录"></button>
       </div>
     </section>
 
@@ -403,11 +420,11 @@
         </div>
 
         <!-- 面试专区内部子导航 -->
-        <div class="interview-subtabs" id="interview-subtabs">
-          <button class="int-tab active" data-int="types">1. 结构化面试 10 大题型答题框架</button>
-          <button class="int-tab" data-int="flow">2. 面试考场实况与 13 步上岸全流程</button>
-          <button class="int-tab" data-int="volunteer">3. 西部计划基层经历转化为面试高分亮点</button>
-          <button class="int-tab" data-int="checkup">4. 体检 21 条标准与政审考察避坑手册</button>
+        <div class="interview-subtabs" id="interview-subtabs" role="tablist" aria-label="面试专区">
+          <button class="int-tab active" data-int="types" type="button" role="tab" aria-selected="true">1. 结构化面试 10 大题型答题框架</button>
+          <button class="int-tab" data-int="flow" type="button" role="tab" aria-selected="false">2. 面试考场实况与 13 步上岸全流程</button>
+          <button class="int-tab" data-int="volunteer" type="button" role="tab" aria-selected="false">3. 西部计划基层经历转化为面试高分亮点</button>
+          <button class="int-tab" data-int="checkup" type="button" role="tab" aria-selected="false">4. 体检 21 条标准与政审考察避坑手册</button>
         </div>
 
         <!-- 面试专区内容容器 -->
@@ -418,11 +435,11 @@
   </main>
 
   <!-- 弹窗一：高分速查宝典 Modal -->
-  <div class="modal-overlay" id="modal-cheatsheet">
+  <div class="modal-overlay" id="modal-cheatsheet" role="dialog" aria-modal="true" aria-labelledby="modal-cheatsheet-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">⚡ 行测与申论核心公式及解题框架速查</h3>
-        <button class="modal-close-btn" id="modal-close-cheatsheet">✕</button>
+        <h3 class="modal-title" id="modal-cheatsheet-title">行测与申论核心公式及解题框架速查</h3>
+        <button class="modal-close-btn" id="modal-close-cheatsheet" type="button" aria-label="关闭">✕</button>
       </div>
       <div class="cheat-sheet-grid">
         <div class="cheat-card">
@@ -458,11 +475,11 @@
   </div>
 
   <!-- 弹窗二：西部计划报考政策与时间节点 Modal -->
-  <div class="modal-overlay" id="modal-policy">
+  <div class="modal-overlay" id="modal-policy" role="dialog" aria-modal="true" aria-labelledby="modal-policy-title">
     <div class="modal-content">
       <div class="modal-header">
-        <h3 class="modal-title">📜 西部计划志愿者考公政策优势与报考指南</h3>
-        <button class="modal-close-btn" id="modal-close-policy">✕</button>
+        <h3 class="modal-title" id="modal-policy-title">西部计划志愿者考公政策优势与报考指南</h3>
+        <button class="modal-close-btn" id="modal-close-policy" type="button" aria-label="关闭">✕</button>
       </div>
       <div class="cheat-sheet-grid">
         <div class="cheat-card" style="border-left: 4px solid var(--rose);">
@@ -502,13 +519,13 @@
   </div>
 
   <!-- 弹窗三：原版高清思维导图 PNG 灯箱预览 Modal -->
-  <div class="modal-overlay" id="modal-mm-image">
+  <div class="modal-overlay" id="modal-mm-image" role="dialog" aria-modal="true" aria-labelledby="modal-mm-image-title">
     <div class="modal-content modal-lightbox">
       <div class="modal-header">
         <h3 class="modal-title" id="modal-mm-image-title">思维导图高清原图预览</h3>
-        <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <div class="modal-toolbar">
           <a class="btn btn-sm btn-subtle" id="modal-mm-image-raw" href="#" target="_blank" rel="noopener">在新标签页打开原始大图 ↗</a>
-          <button class="modal-close-btn" id="modal-close-mm-image">✕</button>
+          <button class="modal-close-btn" id="modal-close-mm-image" type="button" aria-label="关闭">✕</button>
         </div>
       </div>
       <div class="lightbox-body">

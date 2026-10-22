@@ -3943,7 +3943,8 @@ function initLibraryView() {
   if (!navEl || !viewEl || !articles.length) return;
 
   function renderLib() {
-    navEl.innerHTML = articles.map((art, idx) => {
+    navEl.innerHTML = '<div class="lib-drawer-head"><strong>章节目录</strong><button type="button" class="btn btn-sm" data-close-drawer>关闭</button></div>'
+      + articles.map((art, idx) => {
       return '<button type="button" class="lib-nav-item' + (idx === activeArticleIdx ? ' active' : '') + '" data-idx="' + idx + '">'
         + '<span class="lib-cat-tag">' + art.cat + '</span>'
         + '<span class="lib-item-title">' + art.title + '</span>'
@@ -3954,10 +3955,15 @@ function initLibraryView() {
       btn.addEventListener("click", () => {
         activeArticleIdx = Number(btn.dataset.idx);
         renderLib();
+        if (window.matchMedia("(max-width: 900px)").matches) {
+          setLibDrawer(false);
+          viewEl.scrollIntoView({ behavior: "smooth", block: "start" });
+        }
       });
     });
 
     const cur = articles[activeArticleIdx];
+    if ($("lib-toc-current")) $("lib-toc-current").textContent = cur.title;
     viewEl.innerHTML = '<div class="lib-article-head">'
       + '<div class="lib-meta-row"><span class="deep-badge doc-badge">' + cur.cat + '</span><span class="lib-source-text">来源仓库：<code>' + cur.source + '</code></span>'
       + '<a class="btn btn-xs btn-subtle" href="' + cur.url + '" target="_blank" rel="noopener">查看 GitHub 原文档 ↗</a></div>'
@@ -3977,7 +3983,11 @@ function initInterviewView() {
   if (!body) return;
 
   function showTab(key) {
-    tabs.forEach((t) => t.classList.toggle("active", t.dataset.int === key));
+    tabs.forEach((t) => {
+      const on = t.dataset.int === key;
+      t.classList.toggle("active", on);
+      t.setAttribute("aria-selected", on ? "true" : "false");
+    });
     body.innerHTML = data[key] || "";
   }
 
@@ -3994,14 +4004,135 @@ function initInterviewView() {
   showTab("types");
 }
 
+/* ---------- 窄屏菜单、文库抽屉与弹层滚动锁 ---------- */
+let lockedScrollY = 0;
+
+function syncScrollLock() {
+  const drawer = $("library-nav-list");
+  const shouldLock = !!document.querySelector(".modal-overlay.open")
+    || !!(drawer && drawer.classList.contains("is-open"));
+  const isLocked = document.body.classList.contains("scroll-lock");
+  if (shouldLock && !isLocked) {
+    lockedScrollY = window.scrollY || window.pageYOffset || 0;
+    document.body.style.top = "-" + lockedScrollY + "px";
+    document.body.classList.add("scroll-lock");
+  } else if (!shouldLock && isLocked) {
+    document.body.classList.remove("scroll-lock");
+    document.body.style.top = "";
+    window.scrollTo(0, lockedScrollY);
+  }
+}
+
+function setMenuOpen(open) {
+  const nav = document.querySelector(".navbar");
+  const btn = $("btn-nav-menu");
+  if (!nav || !btn) return;
+  nav.classList.toggle("is-menu-open", !!open);
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  btn.setAttribute("aria-label", open ? "关闭菜单" : "更多操作");
+}
+
+function setLibDrawer(open) {
+  const side = $("library-nav-list");
+  const btn = $("btn-lib-toc");
+  if (!side || !btn) return;
+  const mobileDrawer = window.matchMedia("(max-width: 900px)").matches;
+  const next = !!open && mobileDrawer;
+  side.classList.toggle("is-open", next);
+  document.body.classList.toggle("lib-drawer-open", next);
+  btn.setAttribute("aria-expanded", next ? "true" : "false");
+  side.inert = mobileDrawer && !next;
+  side.setAttribute("aria-hidden", mobileDrawer && !next ? "true" : "false");
+  syncScrollLock();
+}
+
+function openModal(el) {
+  if (!el) return;
+  setMenuOpen(false);
+  el.classList.add("open");
+  syncScrollLock();
+  const closeBtn = el.querySelector(".modal-close-btn");
+  if (closeBtn) closeBtn.focus();
+}
+
+function closeModal(el) {
+  if (!el) return;
+  el.classList.remove("open");
+  syncScrollLock();
+}
+
+function closeAllModals() {
+  document.querySelectorAll(".modal-overlay.open").forEach((el) => el.classList.remove("open"));
+  syncScrollLock();
+}
+
+function initMobileChrome() {
+  const menuBtn = $("btn-nav-menu");
+  if (menuBtn) {
+    menuBtn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      const nav = document.querySelector(".navbar");
+      setMenuOpen(!(nav && nav.classList.contains("is-menu-open")));
+    });
+  }
+  const more = $("nav-more");
+  if (more) {
+    more.addEventListener("click", (e) => {
+      if (e.target.closest("button")) setMenuOpen(false);
+    });
+  }
+  document.addEventListener("click", (e) => {
+    const nav = document.querySelector(".navbar");
+    if (!nav || !nav.classList.contains("is-menu-open")) return;
+    if (e.target.closest("#nav-more") || e.target.closest("#btn-nav-menu")) return;
+    setMenuOpen(false);
+  });
+  const tocBtn = $("btn-lib-toc");
+  if (tocBtn) {
+    tocBtn.addEventListener("click", () => {
+      const side = $("library-nav-list");
+      const willOpen = !(side && side.classList.contains("is-open"));
+      setLibDrawer(willOpen);
+      if (willOpen && side) {
+        const active = side.querySelector(".lib-nav-item.active");
+        if (active) active.scrollIntoView({ block: "nearest" });
+      }
+    });
+  }
+  const navEl = $("library-nav-list");
+  if (navEl) {
+    navEl.addEventListener("click", (e) => {
+      if (e.target.closest("[data-close-drawer]")) setLibDrawer(false);
+    });
+  }
+  const backdrop = $("lib-drawer-backdrop");
+  if (backdrop) backdrop.addEventListener("click", () => setLibDrawer(false));
+
+  const onDesktop = (e) => { if (e.matches) setMenuOpen(false); };
+  const onLibWide = (e) => { if (e.matches) setLibDrawer(false); };
+  const mqDesktop = window.matchMedia("(min-width: 1100px)");
+  const mqLib = window.matchMedia("(min-width: 901px)");
+  if (mqDesktop.addEventListener) {
+    mqDesktop.addEventListener("change", onDesktop);
+    mqLib.addEventListener("change", onLibWide);
+  } else {
+    mqDesktop.addListener(onDesktop);
+    mqLib.addListener(onLibWide);
+  }
+}
+
 /* ---------- 顶部四大主视图切换 ---------- */
 function switchMainView(viewName) {
   document.querySelectorAll("#main-view-tabs .main-tab").forEach((btn) => {
-    btn.classList.toggle("active", btn.dataset.view === viewName);
+    const on = btn.dataset.view === viewName;
+    btn.classList.toggle("active", on);
+    btn.setAttribute("aria-selected", on ? "true" : "false");
   });
   document.querySelectorAll(".view-section").forEach((sec) => {
     sec.classList.toggle("active", sec.id === "view-" + viewName);
   });
+  setMenuOpen(false);
+  setLibDrawer(false);
   window.scrollTo({ top: 0, behavior: "smooth" });
 }
 
@@ -4020,9 +4151,16 @@ if ($("btn-jump-library")) {
 function openLightbox(title, src) {
   if (!$("modal-mm-image")) return;
   $("modal-mm-image-title").textContent = title || "思维导图高清原图预览";
+  $("modal-mm-image-el").alt = title || "思维导图原图";
   $("modal-mm-image-el").src = src;
   $("modal-mm-image-raw").href = src;
-  $("modal-mm-image").classList.add("open");
+  openModal($("modal-mm-image"));
+}
+
+function closeLightbox() {
+  closeModal($("modal-mm-image"));
+  const img = $("modal-mm-image-el");
+  if (img) img.removeAttribute("src");
 }
 
 if ($("btn-open-mm-image")) {
@@ -4034,11 +4172,11 @@ if ($("btn-open-mm-image")) {
 }
 
 if ($("modal-close-mm-image")) {
-  $("modal-close-mm-image").addEventListener("click", () => $("modal-mm-image").classList.remove("open"));
+  $("modal-close-mm-image").addEventListener("click", closeLightbox);
 }
 if ($("modal-mm-image")) {
   $("modal-mm-image").addEventListener("click", (e) => {
-    if (e.target === $("modal-mm-image")) $("modal-mm-image").classList.remove("open");
+    if (e.target === $("modal-mm-image")) closeLightbox();
   });
 }
 
@@ -4109,7 +4247,9 @@ $("btn-jump-today").addEventListener("click", () => {
 document.addEventListener("keydown", (e) => {
   const tag = (e.target && e.target.tagName) || "";
   if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
-  if ($("modal-cheatsheet").classList.contains("open") || $("modal-policy").classList.contains("open") || ($("modal-mm-image") && $("modal-mm-image").classList.contains("open"))) return;
+  if (document.querySelector(".modal-overlay.open")) return;
+  if (document.querySelector(".navbar.is-menu-open")) return;
+  if (document.body.classList.contains("lib-drawer-open")) return;
   if (e.key === "ArrowLeft" && selectedDay > 1) {
     selectDay(selectedDay - 1, false);
   } else if (e.key === "ArrowRight" && selectedDay < 100) {
@@ -4131,6 +4271,10 @@ $("detail-notes-input").addEventListener("input", (e) => {
 function applyTheme(theme) {
   document.documentElement.setAttribute("data-theme", theme);
   $("theme-icon").textContent = theme === "dark" ? "☀️" : "🌙";
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute("content", theme === "dark" ? "#0b1120" : "#f4f6fb");
+  const toggle = $("btn-theme-toggle");
+  if (toggle) toggle.setAttribute("aria-label", theme === "dark" ? "切换到浅色模式" : "切换到深色模式");
 }
 applyTheme(state.theme);
 $("btn-theme-toggle").addEventListener("click", () => {
@@ -4142,18 +4286,18 @@ $("btn-theme-toggle").addEventListener("click", () => {
 /* ---------- 弹窗 ---------- */
 function bindModal(openBtn, closeBtn, overlay) {
   if (!$(openBtn) || !$(closeBtn) || !$(overlay)) return;
-  $(openBtn).addEventListener("click", () => $(overlay).classList.add("open"));
-  $(closeBtn).addEventListener("click", () => $(overlay).classList.remove("open"));
-  $(overlay).addEventListener("click", (e) => { if (e.target === $(overlay)) $(overlay).classList.remove("open"); });
+  $(openBtn).addEventListener("click", () => openModal($(overlay)));
+  $(closeBtn).addEventListener("click", () => closeModal($(overlay)));
+  $(overlay).addEventListener("click", (e) => { if (e.target === $(overlay)) closeModal($(overlay)); });
 }
 bindModal("btn-open-cheatsheet", "modal-close-cheatsheet", "modal-cheatsheet");
 bindModal("btn-open-policy", "modal-close-policy", "modal-policy");
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape") {
-    $("modal-cheatsheet").classList.remove("open");
-    $("modal-policy").classList.remove("open");
-    if ($("modal-mm-image")) $("modal-mm-image").classList.remove("open");
-  }
+  if (e.key !== "Escape") return;
+  setMenuOpen(false);
+  setLibDrawer(false);
+  if ($("modal-mm-image") && $("modal-mm-image").classList.contains("open")) closeLightbox();
+  closeAllModals();
 });
 
 /* ---------- 专注计时器（25/45/60分钟） ---------- */
@@ -4174,8 +4318,8 @@ function renderTimer() {
   const mins = Math.round(((state.focus[todayKey()] || 0)) / 60);
   if ($("timer-status-text")) {
     $("timer-status-text").textContent = timerRunning
-      ? "🍅 专注中 (今日" + mins + "m)"
-      : "🍅 专注 " + TIMER_MODES[state.timerMode] + "m (今日" + mins + "m)";
+      ? "专注中 · 今日 " + mins + " 分钟"
+      : "专注 " + TIMER_MODES[state.timerMode] + " 分钟 · 今日 " + mins + " 分钟";
   }
 }
 
@@ -4194,7 +4338,7 @@ $("timer-toggle-btn").addEventListener("click", () => {
     stopInterval();
     addFocus(focusAccum); focusAccum = 0;
     save();
-    $("timer-toggle-btn").textContent = "▶ 继续";
+    $("timer-toggle-btn").textContent = "继续";
   } else {
     timerRunning = true;
     focusAccum = 0;
@@ -4211,12 +4355,12 @@ $("timer-toggle-btn").addEventListener("click", () => {
         stopInterval();
         addFocus(focusAccum); focusAccum = 0; focusSaveTick = 0;
         save();
-        $("timer-toggle-btn").textContent = "▶ 开始";
+        $("timer-toggle-btn").textContent = "开始";
         toast("⏰ 本轮专注完成！起身活动 5 分钟吧");
       }
       renderTimer();
     }, 1000);
-    $("timer-toggle-btn").textContent = "⏸ 暂停";
+    $("timer-toggle-btn").textContent = "暂停";
   }
   renderTimer();
 });
@@ -4226,7 +4370,7 @@ $("timer-reset-btn").addEventListener("click", () => {
   stopInterval();
   if (focusAccum > 0) { addFocus(focusAccum); focusAccum = 0; save(); }
   timerLeft = TIMER_MODES[state.timerMode] * 60;
-  $("timer-toggle-btn").textContent = "▶ 开始";
+  $("timer-toggle-btn").textContent = "开始";
   renderTimer();
 });
 
@@ -4236,7 +4380,7 @@ $("timer-mode-btn").addEventListener("click", () => {
   timerRunning = false;
   stopInterval();
   timerLeft = TIMER_MODES[state.timerMode] * 60;
-  $("timer-toggle-btn").textContent = "▶ 开始";
+  $("timer-toggle-btn").textContent = "开始";
   renderTimer();
   toast("已切换为 " + TIMER_MODES[state.timerMode] + " 分钟专注模式");
 });
@@ -4285,6 +4429,7 @@ $("file-import-input").addEventListener("change", (e) => {
 /* ---------- 初始化 ---------- */
 function init() {
   if (PLAN.length !== 100) console.warn("计划数据不完整：当前", PLAN.length, "天");
+  initMobileChrome();
   renderStats();
   renderFocus(selectedDay);
   initGlobalMindMapsView();
